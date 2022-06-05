@@ -456,16 +456,18 @@ dependencies = [
 
 [[package]]
 name = "llvm_profparser"
-version = "0.1.0-alpha5"
+version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25800c0191fc1d389b781775cf98243a06d1d87a184d899653b4ef964b701785"
+checksum = "d84fc98109a8daffaedd4459b3a8597498008f61681ccbea06501ca0c1162b9a"
 dependencies = [
  "flate2",
+ "indexmap",
  "leb128",
  "md5",
  "nom",
  "num_enum",
  "object 0.26.2",
+ "thiserror",
 ]
 
 [[package]]

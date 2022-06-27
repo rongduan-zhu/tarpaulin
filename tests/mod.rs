@@ -406,6 +406,7 @@ fn dot_rs_in_dir_name() {
 }
 
 #[test]
+#[cfg(unix)]
 fn kill_used_in_test() {
     let mut config = Config::default();
     config.follow_exec = true;

@@ -410,6 +410,7 @@ impl<'a> LinuxData<'a> {
         flag: bool,
     ) -> Result<UpdateContext, RunError> {
         match (sig, flag) {
+            (Signal::SIGKILL, _) => Ok((TestState::wait_state(), TracerAction::Detach(pid.into()))),
             (Signal::SIGTRAP, true) => {
                 Ok((TestState::wait_state(), TracerAction::Continue(pid.into())))
             }

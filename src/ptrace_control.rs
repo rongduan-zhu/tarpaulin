@@ -20,7 +20,10 @@ pub fn trace_children(pid: Pid) -> Result<()> {
 }
 
 pub fn detach_child(pid: Pid) -> Result<()> {
-    detach(pid, None)
+    if let Err(e) = detach(pid, None) {
+        tracing::warn!("Failed to detach child {:?}: {:?}", pid, e);
+    };
+    Ok(())
 }
 
 pub fn continue_exec(pid: Pid, sig: Option<Signal>) -> Result<()> {

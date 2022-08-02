@@ -16,6 +16,10 @@ use procfs::process::{MMapPath, Process};
 use std::collections::{HashMap, HashSet};
 use std::ops::RangeBounds;
 use std::path::PathBuf;
+use sysinfo::ProcessExt;
+use sysinfo::RefreshKind;
+use sysinfo::System;
+use sysinfo::SystemExt;
 use tracing::{debug, info, trace, trace_span, warn};
 
 /// Handle to linux process state
@@ -250,6 +254,13 @@ impl<'a> StateData for LinuxData<'a> {
                 let event = TraceEvent::new_from_wait(status, offset, traces);
                 log.push_trace(event);
             }
+            if let Some(pid) = status.pid() {
+                let system = System::new_with_specifics(RefreshKind::everything());
+                let cmd = system
+                    .process(::sysinfo::Pid::from(pid.as_raw()))
+                    .map(|p| p.cmd());
+                trace!("Process status for {:?} {:?}", pid, cmd);
+            }
             let state = match status {
                 WaitStatus::PtraceEvent(c, s, e) => match self.handle_ptrace_event(*c, *s, *e) {
                     Ok(s) => Ok(s),
@@ -272,9 +283,10 @@ impl<'a> StateData for LinuxData<'a> {
                     TestState::wait_state(),
                     TracerAction::Continue(child.into()),
                 )),
-                WaitStatus::Stopped(_, Signal::SIGSEGV) => Err(RunError::TestRuntime(
-                    "A segfault occurred while executing tests".to_string(),
-                )),
+                WaitStatus::Stopped(pid, Signal::SIGSEGV) => Err(RunError::TestRuntime(format!(
+                    "A segfault occurred for {:?} while executing tests",
+                    pid
+                ))),
                 WaitStatus::Stopped(child, Signal::SIGILL) => {
                     let pc = current_instruction_pointer(*child).unwrap_or(1) - 1;
                     trace!("SIGILL raised. Child program counter is: 0x{:x}", pc);
@@ -497,10 +509,10 @@ impl<'a> LinuxData<'a> {
         for trace in traces.all_traces() {
             for addr in &trace.address {
                 if clashes.contains(&align_address(*addr)) {
-                    trace!(
-                        "Skipping {} as it clashes with previously disabled breakpoints",
-                        addr
-                    );
+                    // trace!(
+                    //     "Skipping {} as it clashes with previously disabled breakpoints",
+                    //     addr
+                    // );
                     continue;
                 }
                 match Breakpoint::new(pid, *addr + offset) {
@@ -514,7 +526,7 @@ impl<'a> LinuxData<'a> {
                         ));
                     }
                     Err(NixErr::UnknownErrno) => {
-                        debug!("Instrumentation address clash, ignoring 0x{:x}", addr);
+                        // debug!("Instrumentation address clash, ignoring 0x{:x}", addr);
                         // Now to avoid weird false positives lets get rid of the other breakpoint
                         // at this address.
                         let aligned = align_address(*addr);
@@ -606,7 +618,6 @@ impl<'a> LinuxData<'a> {
             match event {
                 PTRACE_EVENT_CLONE => match get_event_data(child) {
                     Ok(t) => {
-                        trace!("New thread spawned {}", t);
                         let mut parent = None;
                         if let Some(proc) = self.get_traced_process_mut(child) {
                             proc.thread_count += 1;
@@ -617,6 +628,11 @@ impl<'a> LinuxData<'a> {
                         if let Some(p) = parent {
                             self.pid_map.insert(Pid::from_raw(t as _), p);
                         }
+                        let system = System::new_with_specifics(RefreshKind::everything());
+                        let cmd = system
+                            .process(::sysinfo::Pid::from(t as i32))
+                            .map(|p| p.cmd());
+                        trace!("New thread spawned {} {:?}", t, cmd);
                         Ok((
                             TestState::wait_state(),
                             TracerAction::Continue(child.into()),
